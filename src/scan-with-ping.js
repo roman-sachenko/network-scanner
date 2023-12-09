@@ -16,6 +16,7 @@ const getNetworkInfo = () => {
     }
   }
 }
+
 const ping = async (ip) => {
   return new Promise((resolve, reject) => {
     if (!ip.length) {
@@ -48,30 +49,27 @@ const getActiveIps = async (base) => {
   const ips = getNetworkIpsByBase(base)
   const promises = ips.map((ip) => ping(ip))
   const results = await Promise.all(promises)
-  const activeIps = []
-
-  for (let i = 0; i < results.length; i++) {
-    if (results[i].alive) {
-      activeIps.push(results[i].ip)
-    }
-  }
-
-  return activeIps
+  return results.filter((result) => result.alive).map((result) => result.ip)
 }
 
-const getHostNamesForIp = (ip) => {
-  return new Promise((resolve) => {
-    dns.reverse(ip, (err, hostnames) => {
-      if (err) {
-        return resolve({
-          [ip]: [],
-        })
-      }
-      return resolve({
-        [ip]: hostnames,
+const getHostNamesForIp = async (ip) => {
+  try {
+    const hostnames = await new Promise((resolve) => {
+      dns.reverse(ip, (err, hostnames) => {
+        if (err) {
+          resolve([])
+        }
+        resolve(hostnames)
       })
     })
-  })
+    return {
+      [ip]: hostnames,
+    }
+  } catch (error) {
+    return {
+      [ip]: [],
+    }
+  }
 }
 
 const getHostNamesForIps = async (ips = []) => {
@@ -84,41 +82,38 @@ const getHostNamesForIps = async (ips = []) => {
   }, {})
 }
 
-const isPortOpen = (ip, port) => {
-  return new Promise((resolve) => {
-    const socket = new net.Socket()
-
-    const onError = () => {
-      socket.destroy()
-      return resolve({
-        ip,
-        port,
-        isOpen: false,
-      })
-    }
-
-    const onTimeout = () => {
-      socket.destroy()
-      return resolve({
-        ip,
-        port,
-        isOpen: false,
-      })
-    }
-
-    socket.setTimeout(1000)
-    socket.on('error', onError)
-    socket.on('timeout', onTimeout)
-
-    socket.connect(port, ip, () => {
-      socket.end()
-      return resolve({
-        ip,
-        port,
-        isOpen: true,
+const isPortOpen = async (ip, port) => {
+  try {
+    const isOpen = await new Promise((resolve) => {
+      const socket = new net.Socket()
+      const onError = () => {
+        socket.destroy()
+        resolve(false)
+      }
+      const onTimeout = () => {
+        socket.destroy()
+        resolve(false)
+      }
+      socket.setTimeout(1000)
+      socket.on('error', onError)
+      socket.on('timeout', onTimeout)
+      socket.connect(port, ip, () => {
+        socket.end()
+        resolve(true)
       })
     })
-  })
+    return {
+      ip,
+      port,
+      isOpen,
+    }
+  } catch (error) {
+    return {
+      ip,
+      port,
+      isOpen: false,
+    }
+  }
 }
 
 const getOpenPortsForIp = async (ip, portMax = 65535, portMin = 1) => {
@@ -140,7 +135,6 @@ const getOpenPortsForIp = async (ip, portMax = 65535, portMin = 1) => {
       }
     }
   }
-
   return openPorts
 }
 
@@ -150,7 +144,6 @@ const getOpenPortsForIps = async (ips, portMax = 65535, portMin = 1) => {
     const openPorts = await getOpenPortsForIp(ip, portMax, portMin)
     openPortsByIp[ip] = openPorts
   }
-
   return openPortsByIp
 }
 
@@ -186,17 +179,11 @@ const main = async () => {
   )
   console.info('Scanning active ports. OK.')
 
-  const scanReport = []
-
-  for (const ip of activeIps) {
-    const hostNames = ipsToHostNames[ip]
-    const openPorts = ipsToOpenPorts[ip]
-    scanReport.push({
-      ip,
-      hostnames: hostNames,
-      ports: openPorts,
-    })
-  }
+  const scanReport = activeIps.map((ip) => ({
+    ip,
+    hostnames: ipsToHostNames[ip],
+    ports: ipsToOpenPorts[ip],
+  }))
 
   console.info('Scanning network. OK.')
   logScanReport(scanReport)
