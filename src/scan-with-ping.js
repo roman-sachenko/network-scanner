@@ -2,6 +2,7 @@ const { exec } = require('node:child_process')
 const os = require('node:os')
 const dns = require('node:dns')
 const net = require('node:net')
+const { config } = require('./config')
 
 const getNetworkInfo = () => {
   const networkInterfaces = os.networkInterfaces()
@@ -94,7 +95,7 @@ const isPortOpen = async (ip, port) => {
         socket.destroy()
         resolve(false)
       }
-      socket.setTimeout(1000)
+      socket.setTimeout(config.scan.openPortTimeout)
       socket.on('error', onError)
       socket.on('timeout', onTimeout)
       socket.connect(port, ip, () => {
@@ -153,18 +154,22 @@ const logScanReport = (scanReport) => {
 }
 
 const getPortsRange = () => {
-  const SCAN_PORT_MIN = 1
-  const SCAN_PORT_MAX = 65535
-  const SCAN_PORT_TO_DEFAULT = 1000
-  const SCAN_PORT_FROM_DEFAULT = 1
+  const SCAN_PORT_MIN = config.scan.portRange.scanPortMin
+  const SCAN_PORT_MAX = config.scan.portRange.scanPortMax
+  const SCAN_PORT_TO_DEFAULT = config.scan.portRange.scanPortToDefault
+  const SCAN_PORT_FROM_DEFAULT = config.scan.portRange.scanPortFromDefault
 
   let [, , port1, port2] = process.argv
 
-  const parsePort = (port = 1, defaultPort) => {
+  const parsePort = (port, defaultPort) => {
     const parsedPort = parseInt(port, 10)
     return parsedPort >= SCAN_PORT_MIN && parsedPort <= SCAN_PORT_MAX
       ? parsedPort
       : defaultPort
+  }
+
+  if (!port2) {
+    port2 = SCAN_PORT_MIN
   }
 
   port1 = parsePort(port1, SCAN_PORT_FROM_DEFAULT)
