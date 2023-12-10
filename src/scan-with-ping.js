@@ -116,16 +116,16 @@ const isPortOpen = async (ip, port) => {
   }
 }
 
-const getOpenPortsForIp = async (ip, portMax = 65535, portMin = 1) => {
-  const maxPort = portMax
-  const minPort = portMin
+const getOpenPortsForIp = async (ip, portFrom, portTo) => {
   const batchSize = 3000
   const openPorts = []
 
-  for (let port = minPort; port <= maxPort; port += batchSize) {
-    const endPort = Math.min(port + batchSize, maxPort)
-    const batch = Array.from({ length: endPort - port }, (_, k) => k + port + 1)
-
+  for (let port = portFrom; port <= portTo; port += batchSize) {
+    const endPort = Math.min(port + batchSize, portTo)
+    const batch = Array.from(
+      { length: endPort - port + 1 },
+      (_, k) => k + port + 1
+    )
     const promises = batch.map((port) => isPortOpen(ip, port))
     const results = await Promise.all(promises)
 
@@ -138,25 +138,46 @@ const getOpenPortsForIp = async (ip, portMax = 65535, portMin = 1) => {
   return openPorts
 }
 
-const getOpenPortsForIps = async (ips, portMax = 65535, portMin = 1) => {
+const getOpenPortsForIps = async (ips, portFrom, portTo) => {
   const openPortsByIp = {}
   for await (const ip of ips) {
-    const openPorts = await getOpenPortsForIp(ip, portMax, portMin)
+    const openPorts = await getOpenPortsForIp(ip, portTo, portFrom)
     openPortsByIp[ip] = openPorts
   }
   return openPortsByIp
 }
 
 const logScanReport = (scanReport) => {
-  console.info('Scan report:')
+  console.info('\nScan report:')
   console.table(scanReport)
 }
 
-const main = async () => {
+const getPortsRange = () => {
   const SCAN_PORT_MIN = 1
-  const SCAN_PORT_MAX = 1000
+  const SCAN_PORT_MAX = 65535
+  const SCAN_PORT_TO_DEFAULT = 1000
+  const SCAN_PORT_FROM_DEFAULT = 1
 
-  console.info('Scanning network...', { SCAN_PORT_MIN, SCAN_PORT_MAX })
+  let [, , port1, port2] = process.argv
+
+  const parsePort = (port = 1, defaultPort) => {
+    const parsedPort = parseInt(port, 10)
+    return parsedPort >= SCAN_PORT_MIN && parsedPort <= SCAN_PORT_MAX
+      ? parsedPort
+      : defaultPort
+  }
+
+  port1 = parsePort(port1, SCAN_PORT_FROM_DEFAULT)
+  port2 = parsePort(port2, SCAN_PORT_TO_DEFAULT)
+
+  return {
+    portFrom: Math.min(port1, port2),
+    portTo: Math.max(port1, port2),
+  }
+}
+
+const scan = async (portFrom, portTo) => {
+  console.info('Scanning network...', { portFrom, portTo })
 
   console.info('Getting network info...')
   const { subnets } = getNetworkInfo()
@@ -171,21 +192,31 @@ const main = async () => {
   const ipsToHostNames = await getHostNamesForIps(activeIps)
   console.info('Scanning hostnames for active IPs. OK.')
 
-  console.info('Scanning active ports...')
-  const ipsToOpenPorts = await getOpenPortsForIps(
-    activeIps,
-    SCAN_PORT_MAX,
-    SCAN_PORT_MIN
-  )
+  console.info('Scanning active ports...(May take a few minutes)')
+  const ipsToOpenPorts = await getOpenPortsForIps(activeIps, portTo, portFrom)
   console.info('Scanning active ports. OK.')
 
   const scanReport = activeIps.map((ip) => ({
     ip,
     hostnames: ipsToHostNames[ip],
-    ports: ipsToOpenPorts[ip],
+    ports: ipsToOpenPorts[ip].join(', ') || 'none',
   }))
-
   console.info('Scanning network. OK.')
+  return scanReport
+}
+
+const main = async () => {
+  const TIMER_NAME_NETWORK_SCAN = '[TIME_NETWORK_SCAN]'
+
+  const { portFrom, portTo } = getPortsRange()
+
+  console.time(TIMER_NAME_NETWORK_SCAN)
+
+  const scanReport = await scan(portFrom, portTo)
+
+  console.info('\n')
+  console.timeEnd(TIMER_NAME_NETWORK_SCAN)
+
   logScanReport(scanReport)
 }
 
