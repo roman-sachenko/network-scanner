@@ -1,16 +1,21 @@
 {
-  "name": "netwrok-scanner",
+  "name": "network-scanner",
   "version": "1.0.0",
-  "description": "",
+  "description": "Network Scanner",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npx jest --config jest.unit.js",
     "lint": "npx eslint .",
     "lint:fix": "npx eslint . --fix",
-    "format": "npx prettier --write 'src/**/*.js'"
+    "format": "npx prettier --write 'src/**/*.js'",
+    "scan:ping": "node src/scan-with-ping.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "network",
+    "scanner",
+    "port scanner"
+  ],
+  "author": "Roman Sachenko",
   "license": "ISC",
   "dependencies": {
     "eslint": "^8.55.0",
