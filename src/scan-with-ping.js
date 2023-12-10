@@ -168,6 +168,10 @@ const getPortsRange = () => {
       : defaultPort
   }
 
+  if (!port2) {
+    port2 = SCAN_PORT_MIN
+  }
+
   port1 = parsePort(port1, SCAN_PORT_FROM_DEFAULT)
   port2 = parsePort(port2, SCAN_PORT_TO_DEFAULT)
 
